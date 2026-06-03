@@ -6,8 +6,14 @@ const Product = require('../models/Product');
 // @desc    Get all products (Used by both Admin & Sale)
 router.get('/', async (req, res) => {
     try {
-        const products = await Product.find();
-        res.json(products);
+        const products = await Product.find().lean();
+
+        const result = products.map(({ _id, ...product }) => ({
+            id: _id.toString(),
+            ...product
+        }));
+        console.log('Retrieved products collection:', result);
+        res.json(result);
     } catch (err) {
         res.status(500).json({ message: 'Error retrieving products collection' });
     }

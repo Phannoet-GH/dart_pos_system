@@ -1,9 +1,9 @@
 import 'package:dart_pos_system/models/user.dart';
-import 'api_service.dart';
+import 'package:dart_pos_system/services/api_service.dart';
 
 class AuthService {
   final ApiService _apiService = ApiService();
-  
+
   // Keeps track of the currently logged-in user session in memory
   User? _currentUser;
 
@@ -12,7 +12,10 @@ class AuthService {
 
   /// Authenticates user credentials via the backend API
   /// Uses required named parameters as demanded by the project guidelines
-  Future<User?> login({required String username, required String password}) async {
+  Future<User?> login({
+    required String username,
+    required String password,
+  }) async {
     try {
       // Define payload parameters mapping
       final Map<String, dynamic> loginData = {
@@ -29,7 +32,9 @@ class AuthService {
       if (response != null && response is Map<String, dynamic>) {
         // Instantiate the User model utilizing its Factory Constructor
         _currentUser = User.fromJson(response);
-        print('\n--- Login Successful! Welcome, ${_currentUser!.username} [Role: ${_currentUser!.role}] ---');
+        print(
+          '\n--- Login Successful! Welcome, ${_currentUser!.username} [Role: ${_currentUser!.role}] ---',
+        );
         return _currentUser;
       }
       return null;

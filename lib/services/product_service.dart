@@ -7,8 +7,8 @@ class ProductService {
   /// Fetches all inventory products from MongoDB
   Future<List<Product>> getAllProducts() async {
     try {
-      final response = await _apiService.get(endpoint: '/products');
-      
+      final response = await _apiService.get(endpoint: '/product');
+
       if (response != null && response is List) {
         // Map list elements into structured objects using the product factory schema
         return response.map((jsonItem) => Product.fromJson(jsonItem)).toList();
@@ -23,7 +23,7 @@ class ProductService {
   /// Looks up single product detail records matching a unique ID string
   Future<Product?> getProductDetails({required String id}) async {
     try {
-      final response = await _apiService.get(endpoint: '/products/$id');
+      final response = await _apiService.get(endpoint: '/product/$id');
       if (response != null && response is Map<String, dynamic>) {
         return Product.fromJson(response);
       }
@@ -49,11 +49,15 @@ class ProductService {
         'category_id': categoryId,
       };
 
-      await _apiService.post(endpoint: '/products', body: productPayload);
-      print('\n--- Product "$title" added successfully to backend inventory! ---');
+      await _apiService.post(endpoint: '/product', body: productPayload);
+      print(
+        '\n--- Product "$title" added successfully to backend inventory! ---',
+      );
       return true;
     } catch (e) {
-      print('\n[Add Product Error] ${e.toString().replaceAll('Exception: ', '')}');
+      print(
+        '\n[Add Product Error] ${e.toString().replaceAll('Exception: ', '')}',
+      );
       return false;
     }
   }
@@ -77,7 +81,9 @@ class ProductService {
   Future<bool> deleteProduct({required String id}) async {
     try {
       await _apiService.delete(endpoint: '/products/$id');
-      print('\n--- Product document dropped successfully from system index. ---');
+      print(
+        '\n--- Product document dropped successfully from system index. ---',
+      );
       return true;
     } catch (e) {
       print('\n[Delete Error] ${e.toString().replaceAll('Exception: ', '')}');
@@ -86,9 +92,12 @@ class ProductService {
   }
 
   /// Local Search implementation filtering an already pulled product collection list by title query
-  List<Product> searchProducts({required List<Product> cachedList, required String query}) {
+  List<Product> searchProducts({
+    required List<Product> cachedList,
+    required String query,
+  }) {
     if (query.isEmpty) return cachedList;
-    
+
     // Uses standard List/Map filter logic matching substrings case-insensitively
     return cachedList.where((product) {
       return product.title!.toLowerCase().contains(query.toLowerCase());

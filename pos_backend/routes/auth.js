@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const User = require('../models/User');
+const User = require('../models/user');
 
 // @route   POST /api/auth/login
 // @desc    Authenticate user (Admin/Sale) & return profile details
@@ -26,7 +26,7 @@ router.post('/login', async (req, res) => {
 
         // Return user fields expected by your Dart User.fromJson factory constructor
         res.json({
-            id: user.id,
+            id: user.id, // MongoDB's default unique identifier
             username: user.username,
             role: user.role
         });
