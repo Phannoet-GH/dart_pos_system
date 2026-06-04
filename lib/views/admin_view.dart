@@ -30,7 +30,6 @@ class AdminView {
         await appScope.displayAllProducts();
         break;
       case 2:
-        // 🎯 FIXED: Now routes straight into the backend pipeline method on your app core shell
         await appScope.viewProductDetails();
         break;
       case 3:
@@ -46,7 +45,8 @@ class AdminView {
         await deleteProductRecord(appScope);
         break;
       case 7:
-        await searchProductsWorkflow(appScope);
+        // 🎯 FIXED: Now maps straight into your application runtime processing method
+        await appScope.searchProductsWorkflow();
         break;
       case 8:
         await appScope.viewAllOrdersHistory();
@@ -176,25 +176,6 @@ class AdminView {
     if (confirm) {
       print('⏳ Dropping resource indexes from document clusters...');
       await appScope.productService.deleteProduct(id: realId);
-    }
-  }
-
-  /// Terminal Presentation Function: Searches the local structural array list matches
-  static Future<void> searchProductsWorkflow(dynamic appScope) async {
-    String query = InputValidator.readString(
-      prompt: 'Enter search keywords matching product names: ',
-    );
-    var databaseList = await appScope.productService.getAllProducts();
-    var matches = appScope.productService.searchProducts(
-      cachedList: databaseList,
-      query: query,
-    );
-
-    print('\n🔎 MATCHES FOUND: (${matches.length})');
-    for (var m in matches) {
-      print(
-        '-> Title: ${m.title ?? "No Name"} | Price: \$${(m.price ?? 0.00).toStringAsFixed(2)} | Stock: ${m.stockQuantity}',
-      );
     }
   }
 }
