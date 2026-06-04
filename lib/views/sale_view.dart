@@ -1,7 +1,6 @@
 // lib/views/sale_view.dart
 import 'package:dart_pos_system/helper/input_validator.dart';
 
-
 class SaleView {
   /// Entry logic loop routing choices to specific checkout cart management functions
   static Future<void> handleWorkflow(dynamic appScope) async {
@@ -32,12 +31,10 @@ class SaleView {
         await appScope.displayAllProducts();
         break;
       case 2:
-        // Cross-routes safely to the central details printer routine
-        await appScope.viewProductDetailsDirect();
+        await appScope.viewProductDetails();
         break;
       case 3:
-        // Cross-routes safely to local evaluation text string arrays
-        await appScope.searchProductsDirect();
+        await appScope.searchProductsWorkflow();
         break;
       case 4:
         await addProductToLocalCart(appScope);

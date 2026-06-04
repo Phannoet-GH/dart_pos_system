@@ -1,106 +1,160 @@
+// lib/services/product_service.dart
 import 'package:dart_pos_system/models/product.dart';
 import 'package:dart_pos_system/services/api_service.dart';
 
 class ProductService {
   final ApiService _apiService = ApiService();
 
-  /// Fetches all inventory products from MongoDB
+  /// Fetches all active inventory lines and safely decodes identity headers
   Future<List<Product>> getAllProducts() async {
     try {
+      // 1. Fire network request out to backend route endpoint
       final response = await _apiService.get(endpoint: '/product');
 
-      if (response != null && response is List) {
-        // Map list elements into structured objects using the product factory schema
-        return response.map((jsonItem) => Product.fromJson(jsonItem)).toList();
+      if (response == null) {
+        print('⚠️ Service Alert: Backend network stream returned null.');
+        return [];
       }
-      return [];
+
+      // 2. Normalize JSON enveloping (Handles cases where arrays are wrapped inside data blocks)
+      dynamic targetList = response;
+      if (response is Map<String, dynamic>) {
+        if (response.containsKey('data')) {
+          targetList = response['data'];
+        } else if (response.containsKey('products')) {
+          targetList = response['products'];
+        }
+      }
+
+      // 3. Fallback extraction guard sequence
+      if (targetList is List) {
+        if (targetList.isEmpty) return [];
+        return targetList.map((item) {
+          if (item is Map<String, dynamic>) {
+            // 🎯 FAIL-SAFE NORMALIZATION: If the backend sent 'id' instead of '_id',
+            // merge it so Product.fromJson can map it smoothly.
+            if (!item.containsKey('_id') && item.containsKey('id')) {
+              item['_id'] = item['id'].toString();
+            }
+
+            return Product.fromJson(item);
+          }
+          return Product();
+        }).toList();
+      }
+
+      print(
+        '❌ Data Error: Expected a JSON array format but received: ${targetList.runtimeType}',
+      );
     } catch (e) {
-      print('\n[Product Fetch Error] Failed to retrieve products list: $e');
-      return [];
+      print('❌ Product Service Pipe Crash Exception: $e');
     }
+    return [];
   }
 
-  /// Looks up single product detail records matching a unique ID string
+  /// Queries extended field metrics for a specific product item tracking key
   Future<Product?> getProductDetails({required String id}) async {
     try {
       final response = await _apiService.get(endpoint: '/product/$id');
+
       if (response != null && response is Map<String, dynamic>) {
-        return Product.fromJson(response);
+        // Safe check for wrapper structures
+        Map<String, dynamic> targetData = response;
+        if (response.containsKey('data') &&
+            response['data'] is Map<String, dynamic>) {
+          targetData = response['data'];
+        }
+
+        if (!targetData.containsKey('_id') && targetData.containsKey('id')) {
+          targetData['_id'] = targetData['id'].toString();
+        }
+
+        return Product.fromJson(targetData);
       }
-      return null;
     } catch (e) {
-      print('\n[Details Error] ${e.toString().replaceAll('Exception: ', '')}');
-      return null;
+      print(
+        '❌ Service Pipeline failed to extract single specification details: $e',
+      );
     }
+    return null;
   }
 
-  /// Creates a new product document inside the remote database (Admin Role feature)
-  Future<bool> addProduct({
+  /// Adds a new product record to the database
+  Future<void> addProduct({
     required String title,
     required double price,
     required int stockQuantity,
-    required String categoryId,
+    required String
+    categoryId, // This receives the clean Hex ID from the view selection
   }) async {
     try {
-      final Map<String, dynamic> productPayload = {
+      final payload = {
         'title': title,
         'price': price,
         'stock_quantity': stockQuantity,
+        // 🎯 FIXED: Changed 'categoryId' to 'category_id' to match your Node.js model key
         'category_id': categoryId,
       };
 
-      await _apiService.post(endpoint: '/product', body: productPayload);
-      print(
-        '\n--- Product "$title" added successfully to backend inventory! ---',
+      // Ensure endpoint matches your active Node.js router path (e.g., '/product' or '/api/products')
+      final response = await _apiService.post(
+        endpoint: '/product',
+        body: payload,
       );
-      return true;
+      if (response != null) {
+        print('✅ Product "$title" successfully created in MongoDB.');
+      }
     } catch (e) {
-      print(
-        '\n[Add Product Error] ${e.toString().replaceAll('Exception: ', '')}',
-      );
-      return false;
+      print('❌ Product creation service pipeline failed: $e');
     }
   }
 
-  /// Updates existing records or custom inventory balances (Admin/Stock Management Feature)
-  Future<bool> updateProduct({
+  /// Partially modifies fields on an existing product record
+  Future<void> updateProduct({
     required String id,
     required Map<String, dynamic> updatedFields,
   }) async {
     try {
-      await _apiService.put(endpoint: '/products/$id', body: updatedFields);
-      print('\n--- Inventory specifications updated successfully! ---');
-      return true;
-    } catch (e) {
-      print('\n[Update Error] ${e.toString().replaceAll('Exception: ', '')}');
-      return false;
-    }
-  }
-
-  /// Removes an item altogether from the active system data pool (Admin feature)
-  Future<bool> deleteProduct({required String id}) async {
-    try {
-      await _apiService.delete(endpoint: '/products/$id');
-      print(
-        '\n--- Product document dropped successfully from system index. ---',
+      final response = await _apiService.put(
+        endpoint: '/product/$id',
+        body: updatedFields,
       );
-      return true;
+      if (response != null) {
+        print('✅ Product modifications successfully saved to database.');
+      }
     } catch (e) {
-      print('\n[Delete Error] ${e.toString().replaceAll('Exception: ', '')}');
-      return false;
+      print('❌ Product update service pipeline failed: $e');
     }
   }
 
-  /// Local Search implementation filtering an already pulled product collection list by title query
+  /// Permanently removes a product record from the database
+  Future<void> deleteProduct({required String id}) async {
+    try {
+      final response = await _apiService.delete(endpoint: '/product/$id');
+      if (response != null) {
+        print('✅ Product safely purged from storage clusters.');
+      }
+    } catch (e) {
+      print('❌ Product deletion service pipeline failed: $e');
+    }
+  }
+
+  /// Searches a cached local collection list for matching keywords
   List<Product> searchProducts({
     required List<Product> cachedList,
     required String query,
   }) {
-    if (query.isEmpty) return cachedList;
+    if (query.trim().isEmpty) return cachedList;
+    final normalizedQuery = query.toLowerCase();
 
-    // Uses standard List/Map filter logic matching substrings case-insensitively
     return cachedList.where((product) {
-      return product.title!.toLowerCase().contains(query.toLowerCase());
+      final titleMatch = (product.title ?? '').toLowerCase().contains(
+        normalizedQuery,
+      );
+      final categoryMatch = (product.categoryName ?? '').toLowerCase().contains(
+        normalizedQuery,
+      );
+      return titleMatch || categoryMatch;
     }).toList();
   }
 }

@@ -13,6 +13,7 @@ connectDB();
 
 // Mount API Route Middleware Handlers
 app.use('/api/auth', require('./routes/auth.js'));
+app.use('/api', require('./routes/category.js'));
 app.use('/api/product', require('./routes/product.js'));
 app.use('/api/order', require('./routes/order.js'));
 

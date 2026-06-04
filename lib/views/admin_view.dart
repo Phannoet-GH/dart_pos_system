@@ -1,3 +1,4 @@
+// lib/views/admin_view.dart
 import 'dart:io';
 import '../helper/input_validator.dart';
 
@@ -10,17 +11,18 @@ class AdminView {
     print('1. Display All Products (API)');
     print('2. View Product Details (API)');
     print('3. Add New Product (API)');
-    print('4. Update Product / Manage Stock (API)');
-    print('5. Delete Product (API)');
-    print('6. Search Products (Local)');
-    print('7. View All Transaction Orders (API)');
-    print('8. Logout Session');
+    print('4. Update Product Details (API)');
+    print('5. Manage Inventory Stock (API)');
+    print('6. Delete Product (API)');
+    print('7. Search Products (Local)');
+    print('8. View All Transaction Orders (API)');
+    print('9. Logout Session');
     print('====================================');
 
     int choice = InputValidator.readInt(
-      prompt: 'Choose an operational index (1-8): ',
+      prompt: 'Choose an operational index (1-9): ',
       min: 1,
-      max: 8,
+      max: 9,
     );
 
     switch (choice) {
@@ -28,46 +30,30 @@ class AdminView {
         await appScope.displayAllProducts();
         break;
       case 2:
-        await viewProductDetails(appScope);
+        // 🎯 FIXED: Now routes straight into the backend pipeline method on your app core shell
+        await appScope.viewProductDetails();
         break;
       case 3:
         await addNewProduct(appScope);
         break;
       case 4:
-        await updateProductInfo(appScope);
+        await updateProductFields(appScope);
         break;
       case 5:
-        await deleteProductRecord(appScope);
+        await manageStockLevel(appScope);
         break;
       case 6:
-        await searchProductsWorkflow(appScope);
+        await deleteProductRecord(appScope);
         break;
       case 7:
-        await appScope.viewAllOrdersHistory();
+        await searchProductsWorkflow(appScope);
         break;
       case 8:
+        await appScope.viewAllOrdersHistory();
+        break;
+      case 9:
         appScope.logoutSession();
         break;
-    }
-  }
-
-  /// Interactive Form Function: View deep details of an item using its list number
-  static Future<void> viewProductDetails(dynamic appScope) async {
-    String? realId = appScope.getMongoIdFromNoInput();
-    if (realId == null) return;
-
-    print('⏳ Querying product records from MongoDB...');
-    var prod = await appScope.productService.getProductDetails(id: realId);
-    if (prod != null) {
-      print('\n📦 PRODUCT SPECIFICATIONS DETAIL RECORD:');
-      print('• Title Identity: ${prod.title ?? "Missing Name"}');
-      print('• Price Matrix:   \$${(prod.price ?? 0.00).toStringAsFixed(2)}');
-      print(
-        '• Stock Balance:  ${(prod.stockQuantity ?? 0).toString()} items left',
-      );
-      print('• Category Group: ${prod.categoryName ?? "Uncategorized"}');
-    } else {
-      print('\n❌ Error: Product details could not be parsed.');
     }
   }
 
@@ -102,8 +88,8 @@ class AdminView {
     );
   }
 
-  /// Interactive Form Function: Partially modify existing fields using inline prompt lines
-  static Future<void> updateProductInfo(dynamic appScope) async {
+  /// Focused purely on details customization (Title, Price, Category)
+  static Future<void> updateProductFields(dynamic appScope) async {
     String? realId = appScope.getMongoIdFromNoInput();
     if (realId == null) return;
 
@@ -114,17 +100,12 @@ class AdminView {
     stdout.write('New Price (Press Enter to Skip): ');
     String? priceInput = stdin.readLineSync()?.trim();
 
-    stdout.write('New Stock Level (Press Enter to Skip): ');
-    String? stockInput = stdin.readLineSync()?.trim();
-
     Map<String, dynamic> updatedFields = {};
-    if (titleInput != null && titleInput.isNotEmpty)
+    if (titleInput != null && titleInput.isNotEmpty) {
       updatedFields['title'] = titleInput;
+    }
     if (priceInput != null && priceInput.isNotEmpty) {
       updatedFields['price'] = double.tryParse(priceInput) ?? 0.00;
-    }
-    if (stockInput != null && stockInput.isNotEmpty) {
-      updatedFields['stock_quantity'] = int.tryParse(stockInput) ?? 0;
     }
 
     stdout.write('Do you want to update the category? (y/N): ');
@@ -132,19 +113,56 @@ class AdminView {
     if (changeCat == 'y' || changeCat == 'yes') {
       String? updatedCatId = await appScope.selectCategoryByNo();
       if (updatedCatId != null) {
-        updatedFields['categoryId'] = updatedCatId;
+        updatedFields['category_id'] = updatedCatId;
       }
     }
 
     if (updatedFields.isNotEmpty) {
-      print('⏳ Pushing partial structural modification mappings to server...');
+      print('⏳ Pushing description adjustments to database server...');
       await appScope.productService.updateProduct(
         id: realId,
         updatedFields: updatedFields,
       );
     } else {
-      print('No changes submitted.');
+      print('No change updates submitted.');
     }
+  }
+
+  /// Dedicated specifically to Stock Audits & Cargo Arrivals
+  static Future<void> manageStockLevel(dynamic appScope) async {
+    String? realId = appScope.getMongoIdFromNoInput();
+    if (realId == null) return;
+
+    print('\n--- INVENTORY STOCK MANAGEMENT ---');
+    print('1. Add New Shipment (Increase Stock)');
+    print('2. Manual Stock Adjustment Correction (Set Absolute Level)');
+    int stockMode = InputValidator.readInt(
+      prompt: 'Select operation type (1-2): ',
+      min: 1,
+      max: 2,
+    );
+
+    Map<String, dynamic> updatedFields = {};
+
+    if (stockMode == 1) {
+      int incomingQty = InputValidator.readInt(
+        prompt: 'Enter quantity received from supplier: ',
+        min: 1,
+      );
+      updatedFields['stock_increment'] = incomingQty;
+    } else {
+      int absoluteQty = InputValidator.readInt(
+        prompt: 'Enter actual real stock level sitting on shelf: ',
+        min: 0,
+      );
+      updatedFields['stock_quantity'] = absoluteQty;
+    }
+
+    print('⏳ Adjusting stock pool matrix records...');
+    await appScope.productService.updateProduct(
+      id: realId,
+      updatedFields: updatedFields,
+    );
   }
 
   /// Interactive Form Function: Drop records permanently from database clusters
