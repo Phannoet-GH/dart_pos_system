@@ -8,17 +8,18 @@ import 'package:dart_pos_system/services/auth_service.dart';
 import 'package:dart_pos_system/services/product_service.dart';
 import 'package:dart_pos_system/services/api_service.dart';
 import 'package:dart_pos_system/helper/input_validator.dart';
+import 'package:dart_pos_system/helper/menu_selector.dart';
+import 'package:dart_pos_system/helper/category_cache_helper.dart'; // ✅ Added to delegate cache operations
 import 'package:dart_pos_system/views/admin_view.dart';
 import 'package:dart_pos_system/views/sale_view.dart';
+import 'package:dart_pos_system/helper/table.view.dart';
 
 class App {
-  // ✅ Exposed core services configuration context
   final AuthService authService = AuthService();
   final ProductService productService = ProductService();
   final ApiService apiService = ApiService();
   final Cart localCart = Cart();
 
-  // ✅ Global state index reference tracking vectors
   final Map<int, String> menuIdToMongoIdMap = {};
   final Map<int, String> menuIdToCategoryIdMap = {};
   final Map<String, String> categoryIdToNameMap = {};
@@ -45,10 +46,6 @@ class App {
     }
   }
 
-  // =========================================================================
-  // CORE INFRASTRUCTURE UTILITIES / ROUTING PLUGINS
-  // =========================================================================
-
   /// Clears active running operations and terminates session context variables safely
   void logoutSession() {
     localCart.clear();
@@ -65,31 +62,9 @@ class App {
     print('\n🛒 Active session cart cleared out successfully.');
   }
 
-  /// Translates a terminal item index key back to its true MongoDB Hex string.
+  /// Wrapper linking components cleanly back to the modular MenuSelector class
   String? getMongoIdFromNoInput() {
-    if (menuIdToMongoIdMap.isEmpty) {
-      print('\n⚠️ Operational Block: Product map is currently empty.');
-      print(
-        '👉 Please select option [1] to pull a fresh product list stream first.',
-      );
-      return null;
-    }
-
-    int inputNo = InputValidator.readInt(
-      prompt: 'Enter Product List Number (No): ',
-      min: 1,
-      max: menuIdToMongoIdMap.length,
-    );
-
-    String? realMongoId = menuIdToMongoIdMap[inputNo];
-    if (realMongoId == null || realMongoId.isEmpty) {
-      print(
-        '❌ Execution Fault: Selection resolved to an empty or invalid reference key.',
-      );
-      return null;
-    }
-
-    return realMongoId;
+    return MenuSelector.getMongoIdFromMap(menuIdToMongoIdMap);
   }
 
   /// Bridging hook allowing alternative UI perspectives to invoke the lookup matrix directly
@@ -101,9 +76,10 @@ class App {
 
   /// Handles input credential verification requests
   Future<void> _showLoginMenu() async {
-    print('\n--- SYSTEM AUTHENTICATION ---');
+    print('\n=== SYSTEM AUTHENTICATION ===');
     print('1. Login to POS');
     print('2. Exit Application');
+    print('=============================');
     int choice = InputValidator.readInt(
       prompt: 'Select an option : ',
       min: 1,
@@ -114,9 +90,10 @@ class App {
       print('\nGoodbye!');
       exit(0);
     }
-
+    print('\n=== LOGIN TO POS SYSTEM ===');
     String username = InputValidator.readString(prompt: 'Username: ');
     String password = InputValidator.readPassword(prompt: 'Password: ');
+    print("=============================");
     print('\n⏳ Connecting to authentication server...');
 
     final loginResult = await authService.login(
@@ -141,13 +118,15 @@ class App {
         }
 
         menuIdToCategoryIdMap.clear();
-        print('\n--- AVAILABLE CATEGORIES ---');
+
+        // Render UI table list using helper
+        TableView.renderCategorySelectionList(response);
+
         for (int i = 0; i < response.length; i++) {
           var cat = response[i];
           int displayNo = i + 1;
           menuIdToCategoryIdMap[displayNo] = (cat['_id'] ?? cat['id'] ?? '')
               .toString();
-          print('$displayNo. ${cat['name'] ?? "Unnamed Category"}');
         }
 
         int choice = InputValidator.readInt(
@@ -165,23 +144,11 @@ class App {
 
   /// Synchronizes the key-value map cache linking raw Hex strings to readable names
   Future<void> syncCategoryCache() async {
-    try {
-      final response = await apiService.get(endpoint: '/category');
-      if (response != null && response is List) {
-        categoryIdToNameMap.clear();
-        for (var cat in response) {
-          if (cat is Map && cat['name'] != null) {
-            String? rawId = (cat['_id'] ?? cat['id'])?.toString();
-            if (rawId != null) {
-              String cleanKey = rawId.trim().toLowerCase();
-              categoryIdToNameMap[cleanKey] = cat['name'].toString();
-            }
-          }
-        }
-      }
-    } catch (e) {
-      print('⚠️ Category Cache Sync failed slightly: $e');
-    }
+    // Completely delegated to your helper module to keep lib/app.dart light
+    await CategoryCacheHelper.syncCache(
+      apiService: apiService,
+      categoryIdToNameMap: categoryIdToNameMap,
+    );
   }
 
   /// Pulls product inventory lists and renders a formatted table string layout
@@ -195,36 +162,12 @@ class App {
       return;
     }
 
-    menuIdToMongoIdMap.clear();
-
-    print('-' * 108);
-    print(
-      '${"NO".padRight(5)} | ${"PRODUCT NAME".padRight(40)} | ${"CATEGORY".padRight(20)} | ${"PRICE".padRight(12)} | ${"STOCK".padRight(6)}',
+    TableView.renderProductTable(
+      products: products,
+      categoryIdToNameMap: categoryIdToNameMap,
+      localCart: localCart,
+      menuIdToMongoIdMap: menuIdToMongoIdMap,
     );
-    print('-' * 108);
-
-    for (int i = 0; i < products.length; i++) {
-      var prod = products[i];
-      int displayNo = i + 1;
-      if (prod.id != null) menuIdToMongoIdMap[displayNo] = prod.id!;
-
-      String finalCategoryLabel = "Uncategorized";
-      if (prod.categoryName != null && prod.categoryName!.isNotEmpty) {
-        String lookupKey = prod.categoryName!.trim().toLowerCase();
-        if (categoryIdToNameMap.containsKey(lookupKey)) {
-          finalCategoryLabel = categoryIdToNameMap[lookupKey]!;
-        } else {
-          finalCategoryLabel = lookupKey.length > 12
-              ? 'ID: ${lookupKey.substring(0, 6)}...'
-              : lookupKey;
-        }
-      }
-
-      print(
-        '${displayNo.toString().padRight(5)} | ${(prod.title ?? "Unknown").padRight(40)} | ${finalCategoryLabel.padRight(20)} | \$${(prod.price ?? 0.00).toStringAsFixed(2).padRight(11)} | ${prod.stockQuantity.toString().padRight(6)}',
-      );
-    }
-    print('-' * 108);
   }
 
   /// Displays item structural specs using list map index translations
@@ -246,37 +189,31 @@ class App {
         }
       }
 
-      print('\n📦 PRODUCT SPECIFICATIONS DETAIL RECORD:');
-      print('• Title Identity: ${prod.title ?? "Missing Name"}');
-      print('• Price Matrix:   \$${(prod.price ?? 0.00).toStringAsFixed(2)}');
-      print(
-        '• Stock Balance:  ${(prod.stockQuantity ?? 0).toString()} items left',
-      );
-      print('• Category Group: $displayCategory');
+      TableView.renderProductDetailsCard(prod, displayCategory);
     } else {
-      print('\n❌ Error: Product details could not be parsed.');
+      print('\n❌ Error: Product details could not be parsed or found.');
     }
   }
 
-  /// 🎯 MOVED HERE: Terminal logic routine evaluating text keyword matches inside collections
+  /// Terminal logic routine evaluating text keyword matches inside collections
   Future<void> searchProductsWorkflow() async {
     String query = InputValidator.readString(
       prompt: 'Enter search keywords matching product names: ',
     );
     print('⏳ Querying inventory indices...');
 
+    await syncCategoryCache();
     var databaseList = await productService.getAllProducts();
     var matches = productService.searchProducts(
       cachedList: databaseList,
       query: query,
     );
 
-    print('\n🔎 MATCHES FOUND: (${matches.length})');
-    for (var m in matches) {
-      print(
-        '-> Title: ${m.title ?? "No Name"} | Price: \$${(m.price ?? 0.00).toStringAsFixed(2)} | Stock: ${m.stockQuantity}',
-      );
-    }
+    TableView.renderSearchTable(
+      matches: matches,
+      categoryIdToNameMap: categoryIdToNameMap,
+      localCart: localCart,
+    );
   }
 
   /// Sends checkout transaction lists as payload streams to endpoint nodes
@@ -305,14 +242,12 @@ class App {
     };
 
     try {
-      // Send payload stream to backend checkout endpoint node
       final response = await apiService.post(
         endpoint: '/order/checkout',
         body: orderPayload,
       );
 
       if (response != null) {
-        // Handle unexpected application error responses embedded within the status payload
         if (response is Map && response.containsKey('message')) {
           print('\n⚠️ CHECKOUT REJECTED BY SERVER:');
           print('👉 ${response['message']}');
@@ -325,9 +260,7 @@ class App {
         localCart.clear();
       }
     } catch (e) {
-      // 💡 Strips downstream strings to detect exact exception text sent back by ApiService
       String errorMsg = e.toString();
-
       if (errorMsg.contains('Insufficient stock') ||
           errorMsg.contains('invalid') ||
           errorMsg.contains('empty')) {
@@ -341,7 +274,7 @@ class App {
 
   /// Iterates through customer receipt histories, mapping indices sequentially into structured tables
   Future<void> viewAllOrdersHistory() async {
-    print('\n--- PULLING ALL COMPLETED ORDER LOG RECORDS ---');
+    print('\n=== PULLING ALL COMPLETED ORDER LOG RECORDS ===');
     try {
       await syncCategoryCache();
 
@@ -367,16 +300,15 @@ class App {
         int receiptNo = 1;
 
         for (var order in structuredOrders) {
-          // 📊 RECEIPT CONTAINER HEADER (80 characters wide alignment box)
           print('\n┌' + '─' * 78 + '┐');
           print(
-            '│ SALES RECEIPT '.padRight(35) +
-                'No. ${receiptNo.toString().padRight(40)}│',
+            '│ ' +
+                'SALES RECEIPT '.padRight(34) +
+                'No. ${receiptNo.toString().padRight(38)} │',
           );
-          print('│ Cashier: ${(order.soldBy ?? "System Base").padRight(68)}│');
+          print('│ Cashier: ${(order.soldBy ?? "System Base").padRight(67)} │');
           print('├' + '─' * 78 + '┤');
 
-          // Column Headers
           print(
             '│ ${"PRODUCT NAME".padRight(35)} | ${"CATEGORY".padRight(16)} | ${"QTY".padRight(4)} | ${"UNIT PRICE".padRight(12)} │',
           );
@@ -405,20 +337,13 @@ class App {
               }
             }
 
-            // Truncate ultra-long titles to keep table alignment intact
-            if (pTitle.length > 35) {
-              pTitle = pTitle.substring(0, 32) + '...';
-            }
-            if (pCategory.length > 16) {
+            if (pTitle.length > 35) pTitle = pTitle.substring(0, 32) + '...';
+            if (pCategory.length > 16)
               pCategory = pCategory.substring(0, 13) + '...';
-            }
 
+            // ✅ FIXED: Extracted direct raw sales historical value directly instead of compounding math equations
             double displayUnitPrice = (item.priceAtSale ?? 0.00);
-            if ((item.quantity ?? 0) > 0) {
-              displayUnitPrice = displayUnitPrice / item.quantity!;
-            }
 
-            // Print item row inside table borders
             String qtyStr = (item.quantity ?? 0).toString();
             String priceStr = '\$${displayUnitPrice.toStringAsFixed(2)}';
 
@@ -427,7 +352,6 @@ class App {
             );
           }
 
-          // Receipt Footer Summary
           print('├' + '─' * 78 + '┤');
           String totalLabel = 'TOTAL AMOUNT DUE:';
           String totalValStr =
@@ -435,14 +359,14 @@ class App {
 
           print(
             '│ ' +
-                totalLabel.padLeft(52) +
+                totalLabel.padLeft(51) +
                 ' | ' +
                 totalValStr.padRight(22) +
-                '│',
+                ' │',
           );
           print('└' + '─' * 78 + '┘');
 
-          receiptNo++; // Safely advance the menu index
+          receiptNo++;
         }
       }
     } catch (e) {

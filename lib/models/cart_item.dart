@@ -5,5 +5,5 @@ class CartItem {
   int quantity;
 
   CartItem({required this.product, required this.quantity});
-  double get subTotal => product.price! * quantity;
+  double get subTotal => (product.price ?? 0.00) * quantity;
 }

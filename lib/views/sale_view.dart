@@ -1,5 +1,6 @@
 // lib/views/sale_view.dart
 import 'package:dart_pos_system/helper/input_validator.dart';
+import 'package:dart_pos_system/helper/table.view.dart';
 
 class SaleView {
   /// Entry logic loop routing choices to specific checkout cart management functions
@@ -7,16 +8,16 @@ class SaleView {
     print('\n====================================');
     print('         CASHIER SALE PANEL         ');
     print('====================================');
-    print('1. Display All Products (API)');
-    print('2. View Product Details (API)');
-    print('3. Search Products (Local)');
+    print('1. Display All Products');
+    print('2. View Product Details');
+    print('3. Search Products');
     print('4. Add Product to Cart (Local)');
     print('5. View Active Basket Cart (Local)');
     print('6. Update Cart Item Quantity (Local)');
     print('7. Remove Product from Cart (Local)');
     print('8. Clear Active Cart Items (Local)');
-    print('9. Finalize Order Checkout (API)');
-    print('10. View Transaction Orders History (API)');
+    print('9. Finalize Order Checkout');
+    print('10. View Transaction Orders History');
     print('11. Logout Session');
     print('====================================');
 
@@ -89,21 +90,8 @@ class SaleView {
 
   /// Terminal Presentation Function: Formats clean row charts tracking selected items
   static void displayLocalCart(dynamic appScope) {
-    var cart = appScope.localCart;
-    if (cart.items.isEmpty) {
-      print('\n🛒 Your operational session shopping cart is currently empty.');
-      return;
-    }
-    print('\n🛒 --- TEMPORARY SESSION SHOPPING CART ITEMS ---');
-    for (var item in cart.items) {
-      print(
-        '• ${item.product.title ?? "Unknown Item"} x ${item.quantity.toInt()} -> Subtotal: \$${item.subTotal.toStringAsFixed(2)}',
-      );
-    }
-    print('-------------------------------------------------');
-    print(
-      'TOTAL CART BALANCE VALUE: \$${cart.calculateTotalPrice.toStringAsFixed(2)}',
-    );
+    // Renders the structured boxed grid table format dynamically mapping tracking vectors
+    TableView.renderCartTable(appScope.localCart, appScope.menuIdToMongoIdMap);
   }
 
   /// Checkout Cart Function: Overwrites values inside user session lists

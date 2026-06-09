@@ -8,14 +8,14 @@ class AdminView {
     print('\n====================================');
     print('        ADMIN CONTROL CENTER        ');
     print('====================================');
-    print('1. Display All Products (API)');
-    print('2. View Product Details (API)');
-    print('3. Add New Product (API)');
-    print('4. Update Product Details (API)');
-    print('5. Manage Inventory Stock (API)');
-    print('6. Delete Product (API)');
-    print('7. Search Products (Local)');
-    print('8. View All Transaction Orders (API)');
+    print('1. Display All Products');
+    print('2. View Product Details');
+    print('3. Add New Product');
+    print('4. Update Product Details');
+    print('5. Manage Inventory Stock');
+    print('6. Delete Product');
+    print('7. Search Products');
+    print('8. View All Transaction Orders');
     print('9. Logout Session');
     print('====================================');
 
@@ -24,9 +24,11 @@ class AdminView {
       min: 1,
       max: 9,
     );
+    print('=====================================');
 
     switch (choice) {
       case 1:
+        // ✅ This now fires the clean table format automatically via lib/app.dart
         await appScope.displayAllProducts();
         break;
       case 2:
@@ -45,7 +47,6 @@ class AdminView {
         await deleteProductRecord(appScope);
         break;
       case 7:
-        // 🎯 FIXED: Now maps straight into your application runtime processing method
         await appScope.searchProductsWorkflow();
         break;
       case 8:
@@ -59,7 +60,7 @@ class AdminView {
 
   /// Interactive Form Function: Prompts data inputs to register a brand new item
   static Future<void> addNewProduct(dynamic appScope) async {
-    print('\n--- DESIGN NEW ENTRY LOG ---');
+    print('\n=== DESIGN NEW ENTRY LOG ===');
     String title = InputValidator.readString(prompt: 'Product Title: ');
     double price = InputValidator.readDouble(
       prompt: 'Unit Retail Price (\$): ',
@@ -108,6 +109,7 @@ class AdminView {
       updatedFields['price'] = double.tryParse(priceInput) ?? 0.00;
     }
 
+    print('\n=== UPDATE PRODUCT FIELDS ===');
     stdout.write('Do you want to update the category? (y/N): ');
     String? changeCat = stdin.readLineSync()?.trim().toLowerCase();
     if (changeCat == 'y' || changeCat == 'yes') {
@@ -133,32 +135,53 @@ class AdminView {
     String? realId = appScope.getMongoIdFromNoInput();
     if (realId == null) return;
 
-    print('\n--- INVENTORY STOCK MANAGEMENT ---');
-    print('1. Add New Shipment (Increase Stock)');
-    print('2. Manual Stock Adjustment Correction (Set Absolute Level)');
-    int stockMode = InputValidator.readInt(
-      prompt: 'Select operation type (1-2): ',
-      min: 1,
-      max: 2,
-    );
-
-    Map<String, dynamic> updatedFields = {};
-
-    if (stockMode == 1) {
-      int incomingQty = InputValidator.readInt(
-        prompt: 'Enter quantity received from supplier: ',
-        min: 1,
+    print('\n⏳ Querying stock context records from backend...');
+    var prod = await appScope.productService.getProductDetails(id: realId);
+    if (prod == null) {
+      print(
+        '❌ Execution Fault: Could not fetch active product details for verification.',
       );
-      updatedFields['stock_increment'] = incomingQty;
-    } else {
-      int absoluteQty = InputValidator.readInt(
-        prompt: 'Enter actual real stock level sitting on shelf: ',
-        min: 0,
-      );
-      updatedFields['stock_quantity'] = absoluteQty;
+      return;
     }
 
-    print('⏳ Adjusting stock pool matrix records...');
+    // 1. Fetch raw database stock balance
+    int databaseStock = prod.stockQuantity ?? 0;
+
+    // 2. Compute active quantities locked inside local sales sessions
+    int cartQuantity = 0;
+    final matchingCartItems = appScope.localCart.items.where(
+      (item) => item.product.id == prod.id,
+    );
+    if (matchingCartItems.isNotEmpty) {
+      cartQuantity = matchingCartItems.first.quantity.toInt();
+    }
+
+    // 3. Compute real physical stock currently available on the shelf
+    int currentAvailableStock = databaseStock - cartQuantity;
+
+    print('\n====================================================');
+    print('📦 INVENTORY CONTEXT BEFORE INCREMENT:');
+    print('   • Database Master Log : $databaseStock units');
+    print('   • Locked in Active Cart: $cartQuantity units');
+    print('   • Current Shelf Stock  : $currentAvailableStock units');
+    print('====================================================');
+
+    print('\n=== ADD NEW SHIPMENT (INCREASE STOCK) ===');
+    int incomingQty = InputValidator.readInt(
+      prompt: 'Enter quantity received from supplier: ',
+      min: 0,
+    );
+
+    // Increments apply directly to the master database log base
+    int targetAbsoluteQty = databaseStock + incomingQty;
+    print(
+      '\n📈 Processing Math Vector: $databaseStock (DB) + $incomingQty (Incoming) -> New DB Total: $targetAbsoluteQty',
+    );
+
+    // Build payload to sync back to the database service
+    Map<String, dynamic> updatedFields = {'stock_quantity': targetAbsoluteQty};
+
+    print('⏳ Pushing updated stock pool to database server...');
     await appScope.productService.updateProduct(
       id: realId,
       updatedFields: updatedFields,
