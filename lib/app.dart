@@ -373,4 +373,99 @@ class App {
       print('Failed to read response streams cleanly: $e');
     }
   }
+
+  /// ✅ NEW: Pulls orders from API and filters out a single targeted receipt profile
+  Future<void> viewSpecificReceiptWorkflow() async {
+    print('\n=== VIEW SPECIFIC RECEIPT DETAILS ===');
+    try {
+      final response = await apiService.get(endpoint: '/order');
+      if (response == null || response is! List || response.isEmpty) {
+        print('No historical checkout entries found to view.');
+        return;
+      }
+
+      List<Order> structuredOrders = response
+          .map((jsonMap) => Order.fromJson(jsonMap as Map<String, dynamic>))
+          .toList();
+
+      // Display a quick guide of available receipts to make it easy for the user
+      print('\nAvailable Receipts: 1 to ${structuredOrders.length}');
+      int targetReceiptNo = InputValidator.readInt(
+        prompt: 'Enter the Receipt No to view in detail: ',
+        min: 1,
+        max: structuredOrders.length,
+      );
+
+      // Extract the exact single target order from the list index array
+      Order order = structuredOrders[targetReceiptNo - 1];
+
+      // Build out product lookup maps for category translations
+      List<Product> allProducts = await productService.getAllProducts();
+      Map<String, Product> productLookupMap = {};
+      for (var prod in allProducts) {
+        if (prod.id != null) {
+          productLookupMap[prod.id!.trim().toLowerCase()] = prod;
+        }
+      }
+      await syncCategoryCache();
+
+      // Render the single isolated receipt cleanly inside the box layout
+      print('\n┌' + '─' * 78 + '┐');
+      print(
+        '│ ' +
+            'SALES RECEIPT '.padRight(34) +
+            'No. ${targetReceiptNo.toString().padRight(38)} │',
+      );
+      print('│ Cashier: ${(order.soldBy ?? "System Base").padRight(67)} │');
+      print('├' + '─' * 78 + '┤');
+      print(
+        '│ ${"PRODUCT NAME".padRight(35)} | ${"CATEGORY".padRight(16)} | ${"QTY".padRight(4)} | ${"UNIT PRICE".padRight(12)} │',
+      );
+      print('├' + '─' * 78 + '┤');
+
+      var items = order.orderItems ?? [];
+      for (var item in items) {
+        String pTitle = 'Unknown/Deleted Product';
+        String pCategory = 'Uncategorized';
+
+        if (item.productId != null) {
+          String itemProdKey = item.productId!.trim().toLowerCase();
+          if (productLookupMap.containsKey(itemProdKey)) {
+            Product matchedProd = productLookupMap[itemProdKey]!;
+            pTitle = matchedProd.title ?? 'Untitled Product';
+
+            if (matchedProd.categoryName != null) {
+              String catKey = matchedProd.categoryName!.trim().toLowerCase();
+              if (categoryIdToNameMap.containsKey(catKey)) {
+                pCategory = categoryIdToNameMap[catKey]!;
+              }
+            }
+          }
+        }
+
+        if (pTitle.length > 35) pTitle = pTitle.substring(0, 32) + '...';
+        if (pCategory.length > 16)
+          pCategory = pCategory.substring(0, 13) + '...';
+
+        double displayUnitPrice = (item.priceAtSale ?? 0.00);
+        String qtyStr = (item.quantity ?? 0).toString();
+        String priceStr = '\$${displayUnitPrice.toStringAsFixed(2)}';
+
+        print(
+          '│ ${pTitle.padRight(35)} | ${pCategory.padRight(16)} | ${qtyStr.padRight(4)} | ${priceStr.padRight(12)} │',
+        );
+      }
+
+      print('├' + '─' * 78 + '┤');
+      String totalLabel = 'TOTAL AMOUNT DUE:';
+      String totalValStr = '\$${(order.totalPrice ?? 0.00).toStringAsFixed(2)}';
+
+      print(
+        '│ ' + totalLabel.padLeft(51) + ' | ' + totalValStr.padRight(22) + ' │',
+      );
+      print('└' + '─' * 78 + '┘\n');
+    } catch (e) {
+      print('Failed to load specific receipt profile: $e');
+    }
+  }
 }
