@@ -5,70 +5,73 @@ import 'package:dart_pos_system/helper/table.view.dart';
 class SaleView {
   /// Entry logic loop routing choices to specific checkout cart management functions
   static Future<void> handleWorkflow(dynamic appScope) async {
-    print('\n====================================');
-    print('         CASHIER SALE PANEL         ');
-    print('====================================');
-    print('1. Display All Products');
-    print('2. View Product Details');
-    print('3. Search Products');
-    print('4. Add Product to Cart');
-    print('5. View Active Basket Cart');
-    print('6. Update Cart Item Quantity');
-    print('7. Remove Product from Cart');
-    print('8. Clear Active Cart Items');
-    print('9. Calculate Cart Total Price');
-    print('10. Finalize Order Checkout');
-    print('11. View Transaction Orders History');
-    print('12. View Specific Receipt Details');
-    print('13. Logout Session');
-    print('====================================');
+    // Keep the cashier panel open inside an internal runtime execution window
+    while (appScope.authService.currentUser != null) {
+      print('\n====================================');
+      print('         CASHIER SALE PANEL         ');
+      print('====================================');
+      print('1. Display All Products');
+      print('2. View Product Details');
+      print('3. Search Products');
+      print('4. Add Product to Cart');
+      print('5. View Active Basket Cart');
+      print('6. Update Cart Item Quantity');
+      print('7. Remove Product from Cart');
+      print('8. Clear Active Cart Items');
+      print('9. Calculate Cart Total Price');
+      print('10. Finalize Order Checkout');
+      print('11. View Transaction Orders History');
+      print('12. View Specific Receipt Details');
+      print('13. Logout Session');
+      print('====================================');
 
-    int choice = InputValidator.readInt(
-      prompt: 'Select cashier workspace line (1-13): ',
-      min: 1,
-      max: 13,
-    );
+      int choice = InputValidator.readInt(
+        prompt: 'Select cashier workspace line (1-13): ',
+        min: 1,
+        max: 13,
+      );
 
-    switch (choice) {
-      case 1:
-        await appScope.displayAllProducts();
-        break;
-      case 2:
-        await appScope.viewProductDetails();
-        break;
-      case 3:
-        await appScope.searchProductsWorkflow();
-        break;
-      case 4:
-        await addProductToLocalCart(appScope);
-        break;
-      case 5:
-        displayLocalCart(appScope);
-        break;
-      case 6:
-        await updateCartItemQty(appScope);
-        break;
-      case 7:
-        removeItemFromCart(appScope);
-        break;
-      case 8:
-        appScope.clearLocalCart();
-        break;
-      case 9:
-        showCartTotal(appScope);
-        break;
-      case 10:
-        await appScope.executeCheckoutOrder();
-        break;
-      case 11:
-        await appScope.viewAllOrdersHistory();
-        break;
-      case 12:
-        await viewSpecificReceipt(appScope);
-        break;
-      case 13:
-        appScope.logoutSession();
-        break;
+      switch (choice) {
+        case 1:
+          await appScope.displayAllProducts();
+          break;
+        case 2:
+          await appScope.viewProductDetails();
+          break;
+        case 3:
+          await appScope.searchProductsWorkflow();
+          break;
+        case 4:
+          await addProductToLocalCart(appScope);
+          break;
+        case 5:
+          displayLocalCart(appScope);
+          break;
+        case 6:
+          await updateCartItemQty(appScope);
+          break;
+        case 7:
+          removeItemFromCart(appScope);
+          break;
+        case 8:
+          appScope.clearLocalCart();
+          break;
+        case 9:
+          showCartTotal(appScope);
+          break;
+        case 10:
+          await appScope.executeCheckoutOrder();
+          break;
+        case 11:
+          await appScope.viewAllOrdersHistory();
+          break;
+        case 12:
+          await viewSpecificReceipt(appScope);
+          break;
+        case 13:
+          appScope.logoutSession();
+          return; // Explicitly break and step out of loop window mapping context
+      }
     }
   }
 
@@ -174,10 +177,12 @@ class SaleView {
     if (realId != null) {
       appScope.localCart.removeProduct(realId);
       print('🗑️ ${targetItem.product.title} dropped from session basket.');
+    } else {
+      print('❌ Cannot find valid Product ID links inside target cart rows.');
     }
   }
 
-  /// ✅ NEW: Explicit total summation presentation layout (Fulfills Req item 32)
+  /// Explicit total summation presentation layout (Fulfills Req item 32)
   static void showCartTotal(dynamic appScope) {
     if (appScope.localCart.items.isEmpty) {
       print('\n🛒 Cart is empty. Total Amount Due: \$0.00');
@@ -188,17 +193,15 @@ class SaleView {
     print('│ 🛒 CURRENT LOCAL BASKET BALANCE        │');
     print('├────────────────────────────────────────┤');
     print(
-      '│ Total Items Added : ${appScope.localCart.items.length.toString().padRight(19)} │',
+      '│ Total Items Added : ${appScope.localCart.items.length.toString().padRight(18)} │',
     );
-    print('│ Total Basket Value: \$${total.toStringAsFixed(2).padRight(18)} │');
+    print('│ Total Basket Value: \$${total.toStringAsFixed(2).padRight(17)} │');
     print('└────────────────────────────────────────┘');
   }
 
-  /// ✅ NEW: Dedicated individual receipt viewing selector (Fulfills Req item 34)
+  /// Dedicated individual receipt viewing selector (Fulfills Req item 34)
   static Future<void> viewSpecificReceipt(dynamic appScope) async {
     print('\n⏳ Fetching orders context indexes...');
-    // We leverage the existing history call but can isolate a receipt profile here
-    // or let appScope handle an input targeting a specific receipt number index
-    await appScope.viewAllOrdersHistory();
+    await appScope.viewSpecificReceiptWorkflow();
   }
 }

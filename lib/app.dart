@@ -9,7 +9,7 @@ import 'package:dart_pos_system/services/product_service.dart';
 import 'package:dart_pos_system/services/api_service.dart';
 import 'package:dart_pos_system/helper/input_validator.dart';
 import 'package:dart_pos_system/helper/menu_selector.dart';
-import 'package:dart_pos_system/helper/category_cache_helper.dart'; // ✅ Added to delegate cache operations
+import 'package:dart_pos_system/helper/category_cache_helper.dart';
 import 'package:dart_pos_system/views/admin_view.dart';
 import 'package:dart_pos_system/views/sale_view.dart';
 import 'package:dart_pos_system/helper/table.view.dart';
@@ -144,7 +144,6 @@ class App {
 
   /// Synchronizes the key-value map cache linking raw Hex strings to readable names
   Future<void> syncCategoryCache() async {
-    // Completely delegated to your helper module to keep lib/app.dart light
     await CategoryCacheHelper.syncCache(
       apiService: apiService,
       categoryIdToNameMap: categoryIdToNameMap,
@@ -180,8 +179,9 @@ class App {
 
     if (prod != null) {
       String displayCategory = "Uncategorized";
-      if (prod.categoryName != null && prod.categoryName!.isNotEmpty) {
-        String lookupKey = prod.categoryName!.trim().toLowerCase();
+      if (prod.categoryName != null &&
+          prod.categoryName!.toString().isNotEmpty) {
+        String lookupKey = prod.categoryName!.toString().trim().toLowerCase();
         if (categoryIdToNameMap.containsKey(lookupKey)) {
           displayCategory = categoryIdToNameMap[lookupKey]!;
         } else {
@@ -272,112 +272,52 @@ class App {
     }
   }
 
-  /// Iterates through customer receipt histories, mapping indices sequentially into structured tables
+  /// Iterates through customer receipt histories, mapping indices sequentially into a clean summary list
   Future<void> viewAllOrdersHistory() async {
-    print('\n=== PULLING ALL COMPLETED ORDER LOG RECORDS ===');
+    print('\n========================================================');
+    print('          COMPLETED TRANSACTION HISTORY LOGS            ');
+    print('========================================================');
     try {
-      await syncCategoryCache();
-
-      List<Product> allProducts = await productService.getAllProducts();
-      Map<String, Product> productLookupMap = {};
-      for (var prod in allProducts) {
-        if (prod.id != null) {
-          productLookupMap[prod.id!.trim().toLowerCase()] = prod;
-        }
-      }
-
       final response = await apiService.get(endpoint: '/order');
-      if (response != null && response is List) {
-        if (response.isEmpty) {
-          print('No historical checkout entries found.');
-          return;
-        }
-
-        List<Order> structuredOrders = response
-            .map((jsonMap) => Order.fromJson(jsonMap as Map<String, dynamic>))
-            .toList();
-
-        int receiptNo = 1;
-
-        for (var order in structuredOrders) {
-          print('\n┌' + '─' * 78 + '┐');
-          print(
-            '│ ' +
-                'SALES RECEIPT '.padRight(34) +
-                'No. ${receiptNo.toString().padRight(38)} │',
-          );
-          print('│ Cashier: ${(order.soldBy ?? "System Base").padRight(67)} │');
-          print('├' + '─' * 78 + '┤');
-
-          print(
-            '│ ${"PRODUCT NAME".padRight(35)} | ${"CATEGORY".padRight(16)} | ${"QTY".padRight(4)} | ${"UNIT PRICE".padRight(12)} │',
-          );
-          print('├' + '─' * 78 + '┤');
-
-          var items = order.orderItems ?? [];
-          for (var item in items) {
-            String pTitle = 'Unknown/Deleted Product';
-            String pCategory = 'Uncategorized';
-
-            if (item.productId != null) {
-              String itemProdKey = item.productId!.trim().toLowerCase();
-
-              if (productLookupMap.containsKey(itemProdKey)) {
-                Product matchedProd = productLookupMap[itemProdKey]!;
-                pTitle = matchedProd.title ?? 'Untitled Product';
-
-                if (matchedProd.categoryName != null) {
-                  String catKey = matchedProd.categoryName!
-                      .trim()
-                      .toLowerCase();
-                  if (categoryIdToNameMap.containsKey(catKey)) {
-                    pCategory = categoryIdToNameMap[catKey]!;
-                  }
-                }
-              }
-            }
-
-            if (pTitle.length > 35) pTitle = pTitle.substring(0, 32) + '...';
-            if (pCategory.length > 16)
-              pCategory = pCategory.substring(0, 13) + '...';
-
-            // ✅ FIXED: Extracted direct raw sales historical value directly instead of compounding math equations
-            double displayUnitPrice = (item.priceAtSale ?? 0.00);
-
-            String qtyStr = (item.quantity ?? 0).toString();
-            String priceStr = '\$${displayUnitPrice.toStringAsFixed(2)}';
-
-            print(
-              '│ ${pTitle.padRight(35)} | ${pCategory.padRight(16)} | ${qtyStr.padRight(4)} | ${priceStr.padRight(12)} │',
-            );
-          }
-
-          print('├' + '─' * 78 + '┤');
-          String totalLabel = 'TOTAL AMOUNT DUE:';
-          String totalValStr =
-              '\$${(order.totalPrice ?? 0.00).toStringAsFixed(2)}';
-
-          print(
-            '│ ' +
-                totalLabel.padLeft(51) +
-                ' | ' +
-                totalValStr.padRight(22) +
-                ' │',
-          );
-          print('└' + '─' * 78 + '┘');
-
-          receiptNo++;
-        }
+      if (response == null || response is! List || response.isEmpty) {
+        print('No historical checkout entries found.');
+        return;
       }
+
+      List<Order> structuredOrders = response
+          .map((jsonMap) => Order.fromJson(jsonMap as Map<String, dynamic>))
+          .toList();
+
+      print('┌─────────────┬────────────────────────────────┬──────────────┐');
+      print('│ RECEIPT NO. │ CASHIER / SOLD BY              │ TOTAL AMOUNT │');
+      print('├─────────────┼────────────────────────────────┼──────────────┤');
+
+      int receiptNo = 1;
+      for (var order in structuredOrders) {
+        String receiptStr = '#${receiptNo.toString()}';
+        String cashierStr = (order.soldBy ?? "System Base");
+        if (cashierStr.length > 30) {
+          cashierStr = '${cashierStr.substring(0, 27)}...';
+        }
+        String totalStr = '\$${(order.totalPrice ?? 0.00).toStringAsFixed(2)}';
+
+        print(
+          '│ ${receiptStr.padRight(11)} │ ${cashierStr.padRight(30)} │ ${totalStr.padLeft(12)} │',
+        );
+        receiptNo++;
+      }
+      print('└─────────────┴────────────────────────────────┴──────────────┘');
+      print('💡 Tip: To view exact itemizations for a sale, use Option 12.');
     } catch (e) {
-      print('Failed to read response streams cleanly: $e');
+      print('Failed to read transaction log streams: $e');
     }
   }
 
-  /// ✅ NEW: Pulls orders from API and filters out a single targeted receipt profile
+  /// Pulls orders from API and filters out a single targeted receipt profile
   Future<void> viewSpecificReceiptWorkflow() async {
     print('\n=== VIEW SPECIFIC RECEIPT DETAILS ===');
     try {
+      // 1. Fetch orders data baseline
       final response = await apiService.get(endpoint: '/order');
       if (response == null || response is! List || response.isEmpty) {
         print('No historical checkout entries found to view.');
@@ -388,28 +328,29 @@ class App {
           .map((jsonMap) => Order.fromJson(jsonMap as Map<String, dynamic>))
           .toList();
 
-      // Display a quick guide of available receipts to make it easy for the user
-      print('\nAvailable Receipts: 1 to ${structuredOrders.length}');
+      // 2. Safely capture the user input choice boundary
       int targetReceiptNo = InputValidator.readInt(
-        prompt: 'Enter the Receipt No to view in detail: ',
+        prompt:
+            'Enter the Receipt No to open in detail (1 to ${structuredOrders.length}): ',
         min: 1,
         max: structuredOrders.length,
       );
 
-      // Extract the exact single target order from the list index array
       Order order = structuredOrders[targetReceiptNo - 1];
 
-      // Build out product lookup maps for category translations
+      // 3. Fire structural caches and product lookups concurrently
+      print('⏳ Loading detailed collection maps from MongoDB...');
+      await syncCategoryCache();
       List<Product> allProducts = await productService.getAllProducts();
+
       Map<String, Product> productLookupMap = {};
       for (var prod in allProducts) {
         if (prod.id != null) {
           productLookupMap[prod.id!.trim().toLowerCase()] = prod;
         }
       }
-      await syncCategoryCache();
 
-      // Render the single isolated receipt cleanly inside the box layout
+      // 4. Print structured receipt layout
       print('\n┌' + '─' * 78 + '┐');
       print(
         '│ ' +
@@ -434,18 +375,24 @@ class App {
             Product matchedProd = productLookupMap[itemProdKey]!;
             pTitle = matchedProd.title ?? 'Untitled Product';
 
-            if (matchedProd.categoryName != null) {
-              String catKey = matchedProd.categoryName!.trim().toLowerCase();
+            if (matchedProd.categoryName != null &&
+                matchedProd.categoryName!.toString().isNotEmpty) {
+              String catKey = matchedProd.categoryName!
+                  .toString()
+                  .trim()
+                  .toLowerCase();
               if (categoryIdToNameMap.containsKey(catKey)) {
                 pCategory = categoryIdToNameMap[catKey]!;
+              } else {
+                pCategory = catKey;
               }
             }
           }
         }
 
-        if (pTitle.length > 35) pTitle = pTitle.substring(0, 32) + '...';
+        if (pTitle.length > 35) pTitle = '${pTitle.substring(0, 32)}...';
         if (pCategory.length > 16)
-          pCategory = pCategory.substring(0, 13) + '...';
+          pCategory = '${pCategory.substring(0, 13)}...';
 
         double displayUnitPrice = (item.priceAtSale ?? 0.00);
         String qtyStr = (item.quantity ?? 0).toString();
@@ -465,7 +412,7 @@ class App {
       );
       print('└' + '─' * 78 + '┘\n');
     } catch (e) {
-      print('Failed to load specific receipt profile: $e');
+      print('Failed to load specific receipt details: $e');
     }
   }
 }

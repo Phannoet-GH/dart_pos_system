@@ -5,56 +5,58 @@ import '../helper/input_validator.dart';
 class AdminView {
   /// Entry logic loop routing choices to specific management functions
   static Future<void> handleWorkflow(dynamic appScope) async {
-    print('\n====================================');
-    print('        ADMIN CONTROL CENTER        ');
-    print('====================================');
-    print('1. Display All Products');
-    print('2. View Product Details');
-    print('3. Add New Product');
-    print('4. Update Product Details');
-    print('5. Manage Inventory Stock');
-    print('6. Delete Product');
-    print('7. Search Products');
-    print('8. View All Transaction Orders');
-    print('9. Logout Session');
-    print('====================================');
+    // Contains the workspace view inside an isolated runtime execution window
+    while (appScope.authService.currentUser != null) {
+      print('\n====================================');
+      print('        ADMIN CONTROL CENTER        ');
+      print('====================================');
+      print('1. Display All Products');
+      print('2. View Product Details');
+      print('3. Add New Product');
+      print('4. Update Product Details');
+      print('5. Manage Inventory Stock');
+      print('6. Delete Product');
+      print('7. Search Products');
+      print('8. View All Transaction Orders');
+      print('9. Logout Session');
+      print('====================================');
 
-    int choice = InputValidator.readInt(
-      prompt: 'Choose an operational index (1-9): ',
-      min: 1,
-      max: 9,
-    );
-    print('=====================================');
+      int choice = InputValidator.readInt(
+        prompt: 'Choose an operational index (1-9): ',
+        min: 1,
+        max: 9,
+      );
+      print('=====================================');
 
-    switch (choice) {
-      case 1:
-        // ✅ This now fires the clean table format automatically via lib/app.dart
-        await appScope.displayAllProducts();
-        break;
-      case 2:
-        await appScope.viewProductDetails();
-        break;
-      case 3:
-        await addNewProduct(appScope);
-        break;
-      case 4:
-        await updateProductFields(appScope);
-        break;
-      case 5:
-        await manageStockLevel(appScope);
-        break;
-      case 6:
-        await deleteProductRecord(appScope);
-        break;
-      case 7:
-        await appScope.searchProductsWorkflow();
-        break;
-      case 8:
-        await appScope.viewAllOrdersHistory();
-        break;
-      case 9:
-        appScope.logoutSession();
-        break;
+      switch (choice) {
+        case 1:
+          await appScope.displayAllProducts();
+          break;
+        case 2:
+          await appScope.viewProductDetails();
+          break;
+        case 3:
+          await addNewProduct(appScope);
+          break;
+        case 4:
+          await updateProductFields(appScope);
+          break;
+        case 5:
+          await manageStockLevel(appScope);
+          break;
+        case 6:
+          await deleteProductRecord(appScope);
+          break;
+        case 7:
+          await appScope.searchProductsWorkflow();
+          break;
+        case 8:
+          await appScope.viewAllOrdersHistory();
+          break;
+        case 9:
+          appScope.logoutSession();
+          return; // Explicitly drop tracking constraints and step out of loop block
+      }
     }
   }
 
@@ -105,8 +107,16 @@ class AdminView {
     if (titleInput != null && titleInput.isNotEmpty) {
       updatedFields['title'] = titleInput;
     }
+
     if (priceInput != null && priceInput.isNotEmpty) {
-      updatedFields['price'] = double.tryParse(priceInput) ?? 0.00;
+      double? parsedPrice = double.tryParse(priceInput);
+      if (parsedPrice != null && parsedPrice > 0) {
+        updatedFields['price'] = parsedPrice;
+      } else {
+        print(
+          '⚠️ Warning: Invalid numeric price entered. Skipping price conversion step...',
+        );
+      }
     }
 
     print('\n=== UPDATE PRODUCT FIELDS ===');
@@ -144,10 +154,8 @@ class AdminView {
       return;
     }
 
-    // 1. Fetch raw database stock balance
     int databaseStock = prod.stockQuantity ?? 0;
 
-    // 2. Compute active quantities locked inside local sales sessions
     int cartQuantity = 0;
     final matchingCartItems = appScope.localCart.items.where(
       (item) => item.product.id == prod.id,
@@ -156,7 +164,6 @@ class AdminView {
       cartQuantity = matchingCartItems.first.quantity.toInt();
     }
 
-    // 3. Compute real physical stock currently available on the shelf
     int currentAvailableStock = databaseStock - cartQuantity;
 
     print('\n====================================================');
@@ -172,13 +179,11 @@ class AdminView {
       min: 0,
     );
 
-    // Increments apply directly to the master database log base
     int targetAbsoluteQty = databaseStock + incomingQty;
     print(
       '\n📈 Processing Math Vector: $databaseStock (DB) + $incomingQty (Incoming) -> New DB Total: $targetAbsoluteQty',
     );
 
-    // Build payload to sync back to the database service
     Map<String, dynamic> updatedFields = {'stock_quantity': targetAbsoluteQty};
 
     print('⏳ Pushing updated stock pool to database server...');
